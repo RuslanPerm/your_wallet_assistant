@@ -1,11 +1,21 @@
 import sqlite3
+import requests
+
+
+def exchange_rates():  # запрашиваем с парсера курс валют, возвращает словарь {название: отношение к рублю}
+    usd = data['Valute']['USD']['Value']
+    eur = data['Valute']['EUR']['Value']
+    return {data['Valute']['USD']['Name']: usd, data['Valute']['EUR']['Name']: eur}
+
+
+# вход в систему, проверка пароля
 
 
 def login():
     username = input("Введите Ваше имя: ")
     password = input("Введите пароль: ")
 
-    a = cur.execute(f"SELECT name, password FROM users WHERE name = '{username}' AND password = '{password}'")
+    cur.execute(f"SELECT name, password FROM users WHERE name = '{username}' AND password = '{password}'")
     conn.commit()
 
     if not cur.fetchone():
@@ -22,7 +32,7 @@ def login():
     else:
         print('Добро пожаловать!')
 
-# всё, что ниже, относится к регистрации (до нижней границы комментария)
+# регистрация
 
 
 def data_to_base(data_of_user, data_of_budget):  # ф-ия заносит данные в бд: имя, ф-план, распределение и размер бюджета
@@ -111,8 +121,6 @@ def hello():
 
     if are_you_exist == '1':
         login()
-        # name = input('Введите Ваше имя: ')
-        # pass_word = input('Введите пароль: ')
 
     elif are_you_exist == '2':
         user = authorization()
@@ -163,5 +171,7 @@ cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
 conn.commit()
 
 # ###################################
+data = requests.get('https://www.cbr-xml-daily.ru/daily_json.js').json()  # парсинг катировок ЦБ
+
 
 hello()
