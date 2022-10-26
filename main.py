@@ -2,15 +2,37 @@ import sqlite3
 import requests
 
 
-def exchange_rates():  # запрашиваем с парсера курс валют, возвращает словарь {название: отношение к рублю}
+# принимаем данные о затратах от пользователя
+def get_new_data(user_id):
+    cat_ex_name = input("Выберите категорию трат: необходимое или развлечение?: ")
+    cat_ex = input("Сколько Вы потратили: ")
+    sub_cat_ex_name = input("Введите подкатегорию трат: ")
+    sub_cat_ex = input("Сколько Вы потратили: ")
+    try:
+        cat_ex = float(cat_ex)
+        sub_cat_ex = float(sub_cat_ex)
+    except TypeError:
+        print('Вы неправильно ввели затраченную сумму, попробуйте ещё раз')
+        get_new_data(user_id)
+
+    full_data = (user_id, cat_ex_name, cat_ex, sub_cat_ex_name, sub_cat_ex)
+    cur.execute("INSERT INTO expenses (userid, expenses_category, category_costs, expenses_subcategory, "
+                "subcategory_costs) VALUES(?, ?, ?, ?, ?)", full_data)
+    conn.commit()
+
+    return 'Данные успешно введены!'
+
+
+# запрашиваем с парсера курс валют, возвращает словарь {название: отношение к рублю}
+def exchange_rates():
+    data = requests.get('https://www.cbr-xml-daily.ru/daily_json.js').json()  # парсинг катировок ЦБ
     usd = data['Valute']['USD']['Value']
     eur = data['Valute']['EUR']['Value']
+
     return {data['Valute']['USD']['Name']: usd, data['Valute']['EUR']['Name']: eur}
 
 
 # вход в систему, проверка пароля
-
-
 def login():
     username = input("Введите Ваше имя: ")
     password = input("Введите пароль: ")
@@ -32,9 +54,8 @@ def login():
     else:
         print('Добро пожаловать!')
 
+
 # регистрация
-
-
 def data_to_base(data_of_user, data_of_budget):  # ф-ия заносит данные в бд: имя, ф-план, распределение и размер бюджета
     cur.execute('SELECT userid FROM users')  # достаём файлы из колонки userid таблицы users
 
@@ -48,7 +69,8 @@ def data_to_base(data_of_user, data_of_budget):  # ф-ия заносит дан
     return 0
 
 
-def budget_ratio(f_plan, capital):  # распределяет финансы по 3-м основным категориям
+# распределяет финансы по 3-м основным категориям
+def budget_ratio(f_plan, capital):
     if f_plan == 1:
         necessary = 0.4 * capital
         other = 0.2 * capital
@@ -70,7 +92,8 @@ def budget_ratio(f_plan, capital):  # распределяет финансы п
     return 0
 
 
-def data_input(user_data):  # запрашивает информацию о бюджете пользователя
+# запрашивает информацию о бюджете пользователя
+def data_input(user_data):
     try:
         budget = float(input("Введите Ваш бюджет на последующий месяц в рублях: "))
         ratio = budget_ratio(user_data[1], budget)
@@ -121,12 +144,14 @@ def hello():
 
     if are_you_exist == '1':
         login()
+        # return cur.fetchone()[0]
 
     elif are_you_exist == '2':
         user = authorization()
         main_data = data_input(user)
         data_to_base(user, main_data)  # ф-ия заносит данные в бд: имя, ф-план, распределение и размер бюджета
         print('Поздравляю, Вы успешно зарегистрировались!')
+        # return cur.fetchone()[0]
 
     else:
         print("не могу понять Вас, введите '1' чтобы войти или введите '2' чтобы зарегистрироваться")
@@ -143,35 +168,21 @@ cur.execute("""CREATE TABLE IF NOT EXISTS users(
     budget REAL,
     f_plan INTEGER,
     password TEXT)
-""")  # генерируем таблицу c данными о пользователе и создаём 4 колонки
+""")  # генерируем таблицу c данными о пользователе: номер в системе, имя, бюджет, финансовый план, пароль
 conn.commit()
 
 cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
     userid INT PRIMARY KEY,
-    name_of_expenses TEXT,
-    part_of_budget REAL,
-    how_much INTEGER)
-""")  # генерируем таблицу расходов по 3-м основным категориям
+    expenses_category TEXT,
+    category_costs REAL,
+    expenses_subcategory TEXT,
+    subcategory_costs REAL)
+""")
 conn.commit()
-
-cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
-    userid INT PRIMARY KEY,
-    name_of_expenses TEXT,
-    part_of_budget REAL,
-    how_much INTEGER)
-""")  # генерируем таблицу подкатегорий категории "необходимость"
-conn.commit()
-
-cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
-    userid INT PRIMARY KEY,
-    name_of_expenses TEXT,
-    part_of_budget REAL,
-    how_much INTEGER)
-""")  # генерируем таблицу подкатегорий категории "развлечения"
-conn.commit()
+# генерируем таблицу расходов: номер пользователя в системе, категория трат, затрачено на категорию,
+# подкатегория трат, затрачено на подкатегорию
 
 # ###################################
-data = requests.get('https://www.cbr-xml-daily.ru/daily_json.js').json()  # парсинг катировок ЦБ
 
-
-hello()
+id_of_user = hello()
+get_new_data(id_of_user)
