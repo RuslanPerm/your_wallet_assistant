@@ -1,24 +1,29 @@
 import sqlite3
+import sys
 import requests
 
 
 # принимаем данные о затратах от пользователя
 def get_new_data(user_id):
-    cat_ex_name = input("Выберите категорию трат: необходимое или развлечение?: ")
-    cat_ex = input("Сколько Вы потратили: ")
-    sub_cat_ex_name = input("Введите подкатегорию трат: ")
-    sub_cat_ex = input("Сколько Вы потратили: ")
+    cat_exp_name = input("Выберите категорию трат: необходимое или развлечение?: ")
+    sub_cat_exp_name = input("Введите подкатегорию трат: ")
+    expenses = input("Сколько Вы потратили: ")
     try:
-        cat_ex = float(cat_ex)
-        sub_cat_ex = float(sub_cat_ex)
+        expenses = float(expenses)
     except TypeError:
         print('Вы неправильно ввели затраченную сумму, попробуйте ещё раз')
         get_new_data(user_id)
 
-    full_data = (user_id, cat_ex_name, cat_ex, sub_cat_ex_name, sub_cat_ex)
+    conn = sqlite3.connect('database.db')  # создали базу данных (после первого запуска подключает к ней)
+    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+    # реализовать замену данных: достаём данные, увеличиваем, перезаписываем
+
+    full_data = (user_id, cat_exp_name, sub_cat_exp_name, expenses)
     cur.execute("INSERT INTO expenses (userid, expenses_category, category_costs, expenses_subcategory, "
                 "subcategory_costs) VALUES(?, ?, ?, ?, ?)", full_data)
     conn.commit()
+    cur.close()
 
     return 'Данные успешно введены!'
 
@@ -32,27 +37,32 @@ def exchange_rates():
     return {data['Valute']['USD']['Name']: usd, data['Valute']['EUR']['Name']: eur}
 
 
-# вход в систему, проверка пароля
+# вход в систему, проверка пароля + сделать шифрования пароля
 def login():
     username = input("Введите Ваше имя: ")
     password = input("Введите пароль: ")
 
+    conn = sqlite3.connect('database.db')  # создали базу данных (после первого запуска подключает к ней)
+    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
     cur.execute(f"SELECT name, password FROM users WHERE name = '{username}' AND password = '{password}'")
+    id = cur.execute(f"SELECT name, password FROM users WHERE name = '{username}' AND password = '{password}'")
     conn.commit()
+
+    cur.close()
 
     if not cur.fetchone():
         print("Неверный логин или пароль")
-        for i in cur.execute('SELECT * FROM users'):
-            print(i)
         should_continue = input("Похоже Вас нет в нашей системе, желаете зарегистрироваться?"
                                 "\nВведите '1' если да")
         if should_continue == '1':
             authorization()
         else:
-            return 0
+            sys.exit()
 
     else:
         print('Добро пожаловать!')
+        return
 
 
 # регистрация
@@ -110,7 +120,7 @@ def password():
     user_password = input("Придумайте пароль: ")
     if len(user_password) < 8:
         password_alert = input("Пароль ненадёжный, пароль надёжный если в нём больше 8 символов"
-                               "\nВведите '1' чтобы придумать другой, либо '2' чтобы продолить регистрацию")
+                               "\nВведите '1' чтобы придумать другой, либо '2' чтобы продолжить регистрацию")
         if password_alert == '1':
             return password()
 
@@ -143,15 +153,14 @@ def hello():
     are_you_exist = input("Введите '1' чтобы войти или введите '2' чтобы зарегистрироваться ")
 
     if are_you_exist == '1':
-        login()
-        # return cur.fetchone()[0]
+        return login()
 
     elif are_you_exist == '2':
         user = authorization()
         main_data = data_input(user)
         data_to_base(user, main_data)  # ф-ия заносит данные в бд: имя, ф-план, распределение и размер бюджета
         print('Поздравляю, Вы успешно зарегистрировались!')
-        # return cur.fetchone()[0]
+        # return должен возвращать userid
 
     else:
         print("не могу понять Вас, введите '1' чтобы войти или введите '2' чтобы зарегистрироваться")
@@ -179,6 +188,7 @@ cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
     subcategory_costs REAL)
 """)
 conn.commit()
+cur.close()
 # генерируем таблицу расходов: номер пользователя в системе, категория трат, затрачено на категорию,
 # подкатегория трат, затрачено на подкатегорию
 
