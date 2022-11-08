@@ -67,36 +67,40 @@ def login():
 
 # регистрация
 def data_to_base(data_of_user, data_of_budget):  # ф-ия заносит данные в бд: имя, ф-план, распределение и размер бюджета
+    cur = conn.cursor()
     cur.execute('SELECT userid FROM users')  # достаём файлы из колонки userid таблицы users
 
     try:
         id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
     except IndexError:
         id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
-    full_data = (id_number, str(data_of_user[0]), float(data_of_budget[1]), int(data_of_user[1]), str(data_of_user[2]))
-    cur.execute("INSERT INTO users (userid, name, budget, f_plan, password) VALUES(?, ?, ?, ?, ?)", full_data)
+
+    full_data = (id_number, str(data_of_user[0]), float(data_of_budget[1]), int(data_of_user[1]), str(data_of_user[2]),
+                 str(data_of_budget[1]))
+    cur.execute("INSERT INTO users (userid, name, budget, f_plan, password, accumulation) VALUES(?, ?, ?, ?, ?, ?)",
+                full_data)
     conn.commit()
     return 0
 
 
 # распределяет финансы по 3-м основным категориям
-def budget_ratio(f_plan, capital):
+def budget_ratio(f_plan, capital, acc):
     if f_plan == 1:
         necessary = 0.4 * capital
         other = 0.2 * capital
-        savings = 0.4 * capital
+        savings = 0.4 * capital + acc
         return {"необходимое": necessary, "развлечения": other, "накопления": savings}
 
     if f_plan == 2:
         necessary = 0.5 * capital
         other = 0.2 * capital
-        savings = 0.3 * capital
+        savings = 0.3 * capital + acc
         return {"необходимое": necessary, "развлечения": other, "накопления": savings}
 
     if f_plan == 3:
         necessary = 0.5 * capital
         other = 0.4 * capital
-        savings = 0.1 * capital
+        savings = 0.1 * capital + acc
         return {"необходимое": necessary, "развлечения": other, "накопления": savings}
 
     return 0
@@ -106,8 +110,9 @@ def budget_ratio(f_plan, capital):
 def data_input(user_data):
     try:
         budget = float(input("Введите Ваш бюджет на последующий месяц в рублях: "))
-        ratio = budget_ratio(user_data[1], budget)
-        return [ratio, budget]
+        accumulation = float(input("Введите Ваши накопления на данный момент времени: "))
+        ratio = budget_ratio(user_data[1], budget, accumulation)
+        return [ratio, budget, accumulation]
         # возвращает список, в к-м словарь с распределением бюджета по 3-м основным категориям и бюджет
 
     except ValueError:
@@ -162,33 +167,32 @@ def hello():
         print('Поздравляю, Вы успешно зарегистрировались!')
         # return должен возвращать userid
 
-    else:
-        print("не могу понять Вас, введите '1' чтобы войти или введите '2' чтобы зарегистрироваться")
-        return hello()
-
 
 # Работа с БД
 conn = sqlite3.connect('database.db')  # создали базу данных (после первого запуска подключает к ней)
 cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
 cur.execute("""CREATE TABLE IF NOT EXISTS users(
-    userid INT PRIMARY KEY,
+    userid INT PRIMARY KEY, 
     name TEXT,
     budget REAL,
     f_plan INTEGER,
-    password TEXT)
+    password TEXT,
+    accumulation REAL)
 """)  # генерируем таблицу c данными о пользователе: номер в системе, имя, бюджет, финансовый план, пароль
 conn.commit()
 
 cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
     userid INT PRIMARY KEY,
-    expenses_category TEXT,
-    category_costs REAL,
-    expenses_subcategory TEXT,
-    subcategory_costs REAL)
-""")
+    category_name TEXT,
+    importance INT,
+    costs REAL,
+    date_time DATETIME)
+""")  # importance: 1 - необходимое, 2 - развлечение
+
 conn.commit()
 cur.close()
+
 # генерируем таблицу расходов: номер пользователя в системе, категория трат, затрачено на категорию,
 # подкатегория трат, затрачено на подкатегорию
 
