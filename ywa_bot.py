@@ -5,6 +5,52 @@ import datetime
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 
+def how_much_may_cost(event):
+    try:
+        try:  # так как программа устанавливает в userid только целочисленные значения,
+            # то пробуем узнать айди пользователя, если выдаст ошибку, значит пользователя не существует
+            user_id = int(event.object.message['from_id'])
+
+        except TypeError:
+            return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
+                   '"как зарегестрироваться?"'
+
+        conn = sqlite3.connect('database.db')  # подключение к бд
+        cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+        cur.execute(f"SELECT budget FROM users WHERE userid = '{user_id}'")  # выбираем столбец бюджет где айди
+        # равен айди написавшего пользователя
+        balance = cur.fetchone()[0]  # берём это значение
+
+        cur.execute(f"SELECT f_plan FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-план где айди
+        f_plan = cur.fetchone()[0]  # берём это значение
+        print(balance)
+        print(type(balance))
+        conn.commit()
+        cur.close()
+
+        if f_plan == 1:
+            necessary = balance * 0.4
+            other = balance * 0.2
+            return f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на развлечения'
+
+        elif f_plan == 2:
+            necessary = balance * 0.5
+            other = balance * 0.2
+            return f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на развлечения'
+
+        elif f_plan == 3:
+            necessary = balance * 0.5
+            other = balance * 0.4
+            return f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на развлечения'
+
+        else:
+            return "Произошла ошибка, к сожалению пока не могу Вам ответить"
+
+    except sqlite3.Error as error:
+        print("Ошибка при работе с БД", error)
+
+
 # def sub_category_id(cat_name):  # назначает id для подкатегории
 #
 #     conn = sqlite3.connect('database.db')  # создали базу данных (после первого запуска подключает к ней)
@@ -28,22 +74,30 @@ from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 
 def expenses(event):
-    text = event.obj.message['text'].split()
+    try:
+        text = event.obj.message['text'].split()
 
-    conn = sqlite3.connect('database.db')  # подключение к бд
-    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+        conn = sqlite3.connect('database.db')  # подключение к бд
+        cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-    # exp_data = [event.object.message['from_id'], sub_category_id(text[3]), text[3], text[2], text[1],
-    #             str(datetime.datetime.now())[:-10:]]
+        # exp_data = [event.object.message['from_id'], sub_category_id(text[3]), text[3], text[2], text[1],
+        #             str(datetime.datetime.now())[:-10:]]
 
-    exp_data = [event.object.message['from_id'], text[3], text[2], text[1],
-                str(datetime.datetime.now())[:-10:]]
+        exp_data = [event.object.message['from_id'], text[3], text[2], text[1],
+                    str(datetime.datetime.now())[:-10:]]
 
-    cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date_time) "
-                "VALUES(?, ?, ?, ?, ?)", exp_data)
-    conn.commit()
-    cur.close()
-    return f"Данные о трате успешно записаны! {exp_data}"
+        cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date_time) "
+                    "VALUES(?, ?, ?, ?, ?)", exp_data)
+
+        # сделать чтобы вычитал из бюджета
+
+        conn.commit()
+        cur.close()
+
+        return f"Данные о трате успешно записаны! {exp_data}"
+
+    except sqlite3.Error as error:
+        print("Ошибка при работе с БД", error)
 
 
 def registration(event):
@@ -102,7 +156,7 @@ def main():
             elif event.obj.message['text'].lower().startswith('как зарегистрироваться'):
                 vk.messages.send(user_id=event.obj['message']['from_id'],
                                  message="Чтобы зарегистрироваться введите сообщение аналогично данному примеру:\n"
-                                         "?ИМЯ БЮДЖЕТ №_ФИН_ПЛАНА_(1/2/3) ПАРОЛЬ НАКОПЛЕНО",
+                                         "? ИМЯ БЮДЖЕТ №_ФИН_ПЛАНА_(1/2/3) ПАРОЛЬ НАКОПЛЕНО",
                                  random_id=random.randint(0, 2 ** 64))
 
             elif event.obj.message['text'].lower().startswith('?'):
@@ -110,13 +164,13 @@ def main():
                                  message=registration(event),
                                  random_id=random.randint(0, 2 ** 64))
 
-            elif event.obj.message['text'].lower().startswith('зачем ты мне?'):
+            elif event.obj.message['text'].lower().startswith('зачем ты мне'):
                 vk.messages.send(user_id=event.obj['message']['from_id'],
                                  message="Я помогу Вам усилить контроль над собственными финансами"
                                          "и тем самым помочь правильно их распределять",
                                  random_id=random.randint(0, 2 ** 64))
 
-            elif event.obj.message['text'].lower().startswith('что ты умеешь?'):
+            elif event.obj.message['text'].lower().startswith('что ты умеешь'):
                 vk.messages.send(user_id=event.obj['message']['from_id'],
                                  message='Мои возможности:\nЧтобы добавить трату отправьте мне: '
                                          '"потрачено <стоимость> <категория> <подкатегория>"\n'
@@ -132,6 +186,17 @@ def main():
             elif event.obj.message['text'].lower().startswith('потрачено'):
                 vk.messages.send(user_id=event.obj['message']['from_id'],
                                  message=expenses(event),
+                                 random_id=random.randint(0, 2 ** 64))
+
+            elif event.obj.message['text'].lower().startswith('сколько я могу потратить'):
+                vk.messages.send(user_id=event.obj['message']['from_id'],
+                                 message=how_much_may_cost(event),
+                                 random_id=random.randint(0, 2 ** 64))
+
+            else:
+                vk.messages.send(user_id=event.obj['message']['from_id'],
+                                 message="К сожалению, я могу лишь отвечать на установленные команды, "
+                                         "чтобы увидеть список моих команд отправьте мне 'что ты умеешь?'",
                                  random_id=random.randint(0, 2 ** 64))
 
 

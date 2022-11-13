@@ -86,21 +86,25 @@ def data_to_base(data_of_user, data_of_budget):  # ф-ия заносит дан
 # распределяет финансы по 3-м основным категориям
 def budget_ratio(f_plan, capital, acc):
     if f_plan == 1:
+        savings = 0.4 * capital + acc
+        capital -= (savings - acc)
         necessary = 0.4 * capital
         other = 0.2 * capital
-        savings = 0.4 * capital + acc
+
         return {"необходимое": necessary, "развлечения": other, "накопления": savings}
 
     if f_plan == 2:
+        savings = 0.3 * capital + acc
+        capital -= (savings - acc)
         necessary = 0.5 * capital
         other = 0.2 * capital
-        savings = 0.3 * capital + acc
         return {"необходимое": necessary, "развлечения": other, "накопления": savings}
 
     if f_plan == 3:
+        savings = 0.1 * capital + acc
+        capital -= (savings - acc)
         necessary = 0.5 * capital
         other = 0.4 * capital
-        savings = 0.1 * capital + acc
         return {"необходимое": necessary, "развлечения": other, "накопления": savings}
 
     return 0
