@@ -5,6 +5,46 @@ import datetime
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 
+def how_much_is_spent(event):
+    try:
+        try:  # так как программа устанавливает в userid только целочисленные значения,
+            # то пробуем узнать айди пользователя, если выдаст ошибку, значит пользователя не существует
+            user_id = int(event.object.message['from_id'])
+
+        except TypeError:
+            return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
+                   '"как зарегестрироваться?"'
+
+        try:
+            date = event.object.message['text'].split()
+            lst = [date[i] + '-' for i in range(1, len(date))]
+            lst.reverse()
+            lst.append(date[0])
+            date = ''.join(lst)
+
+        except TypeError:
+            spent = 0
+
+        conn = sqlite3.connect('database.db')  # подключение к бд
+        cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+        cur.execute(f"SELECT category_name, costs, time FROM expenses WHERE date = '{user_id}'")
+        # выбираем столбец бюджет где дата равна запрашиваемой
+
+        records = cur.fetchall()
+        lst_of_expenses = []
+        for exp in records:
+            lst_of_expenses.append(exp)
+
+        conn.commit()
+        cur.close()
+
+        return lst_of_expenses
+
+    except sqlite3.Error as error:
+        print("Ошибка при работе с БД", error)
+
+
 def how_much_may_cost(event):
     try:
         try:  # так как программа устанавливает в userid только целочисленные значения,
@@ -32,20 +72,20 @@ def how_much_may_cost(event):
         if f_plan == 1:
             necessary = balance * 0.4
             other = balance * 0.2
-            return f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на развлечения'
+            return [necessary, other]
 
         elif f_plan == 2:
             necessary = balance * 0.5
             other = balance * 0.2
-            return f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на развлечения'
+            return [necessary, other]
 
         elif f_plan == 3:
             necessary = balance * 0.5
             other = balance * 0.4
-            return f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на развлечения'
+            return [necessary, other]
 
         else:
-            return "Произошла ошибка, к сожалению пока не могу Вам ответить"
+            return ["Произошла ошибка, к сожалению", ' пока не могу Вам ответить']
 
     except sqlite3.Error as error:
         print("Ошибка при работе с БД", error)
@@ -84,17 +124,17 @@ def expenses(event):
         #             str(datetime.datetime.now())[:-10:]]
 
         exp_data = [event.object.message['from_id'], text[3], text[2], text[1],
-                    str(datetime.datetime.now())[:-10:]]
+                    str(datetime.datetime.now())[:-16:], str(datetime.datetime.now())[10:-10:]]
 
-        cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date_time) "
-                    "VALUES(?, ?, ?, ?, ?)", exp_data)
+        cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time) "
+                    "VALUES(?, ?, ?, ?, ?, ?)", exp_data)
 
         # сделать чтобы вычитал из бюджета
 
         conn.commit()
         cur.close()
 
-        return f"Данные о трате успешно записаны! {exp_data}"
+        return f"Данные о трате успешно записаны!"
 
     except sqlite3.Error as error:
         print("Ошибка при работе с БД", error)
@@ -190,7 +230,13 @@ def main():
 
             elif event.obj.message['text'].lower().startswith('сколько я могу потратить'):
                 vk.messages.send(user_id=event.obj['message']['from_id'],
-                                 message=how_much_may_cost(event),
+                                 message=f'Вы можете потратить:\n{how_much_may_cost(event)[0]} на необходимые траты'
+                                         f'\n{how_much_may_cost(event)[1]} на развлечения',
+                                 random_id=random.randint(0, 2 ** 64))
+
+            elif event.obj.message['text'].lower().startswith('сколько потрачено за'):
+                vk.messages.send(user_id=event.obj['message']['from_id'],
+                                 message=how_much_is_spent(event),
                                  random_id=random.randint(0, 2 ** 64))
 
             else:

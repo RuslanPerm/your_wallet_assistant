@@ -1,31 +1,51 @@
 import sqlite3
 import sys
 import requests
+import datetime
 
 
 # принимаем данные о затратах от пользователя
 def get_new_data(user_id):
-    cat_exp_name = input("Выберите категорию трат: необходимое или развлечение?: ")
-    sub_cat_exp_name = input("Введите подкатегорию трат: ")
+
+    importance = int(input("Выберите категорию трат: необходимое или развлечение? (1/2): "))
+    cat_exp_name = input("Введите подкатегорию трат: ")
     expenses = input("Сколько Вы потратили: ")
+
     try:
         expenses = float(expenses)
+
     except TypeError:
         print('Вы неправильно ввели затраченную сумму, попробуйте ещё раз')
         get_new_data(user_id)
 
     conn = sqlite3.connect('database.db')  # создали базу данных (после первого запуска подключает к ней)
     cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
-
-    # реализовать замену данных: достаём данные, увеличиваем, перезаписываем
-
-    full_data = (user_id, cat_exp_name, sub_cat_exp_name, expenses)
-    cur.execute("INSERT INTO expenses (userid, expenses_category, category_costs, expenses_subcategory, "
-                "subcategory_costs) VALUES(?, ?, ?, ?, ?)", full_data)
     conn.commit()
     cur.close()
 
-    return 'Данные успешно введены!'
+    cur = conn.cursor()
+    cur.execute('SELECT exp_id FROM expenses')  # достаём файлы из колонки userid таблицы users
+
+    try:
+        id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
+    except IndexError:
+        id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
+
+    # реализовать замену данных: достаём данные, увеличиваем, перезаписываем
+
+    full_data = (id_number, user_id, cat_exp_name, importance, expenses, str(datetime.datetime.now())[:-16:],
+                 str(datetime.datetime.now())[10:-10:])
+    cur.execute("INSERT INTO expenses (exp_id, userid, category_name, importance, costs, date, time) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?)", full_data)
+
+    conn.commit()
+    cur.close()
+    print('Данные успешно введены!')
+    ask = input("Желаете добавить ещё расходы? (да/нет): ")
+    if ask == 'да':
+        get_new_data(user_id)
+    else:
+        return 0
 
 
 # запрашиваем с парсера курс валют, возвращает словарь {название: отношение к рублю}
@@ -37,6 +57,23 @@ def exchange_rates():
     return {data['Valute']['USD']['Name']: usd, data['Valute']['EUR']['Name']: eur}
 
 
+# обработчик неверного ввода пароля
+def wrong_password():
+
+    print("Неверный логин или пароль")
+    should_continue = input("Похоже Вас нет в нашей системе, желаете зарегистрироваться?"
+                            "\nВведите '1' если да, либо '2' чтобы попробовать снова: ")
+
+    if should_continue == '1':
+        authorization()
+
+    elif should_continue == '2':
+        login()
+
+    else:
+        sys.exit()
+
+
 # вход в систему, проверка пароля + сделать шифрования пароля
 def login():
     username = input("Введите Ваше имя: ")
@@ -46,23 +83,20 @@ def login():
     cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
     cur.execute(f"SELECT name, password FROM users WHERE name = '{username}' AND password = '{password}'")
-    id = cur.execute(f"SELECT name, password FROM users WHERE name = '{username}' AND password = '{password}'")
-    conn.commit()
+    # id = cur.execute(f"SELECT name, password FROM users WHERE name = '{username}' AND password = '{password}'")
 
-    cur.close()
+    try:
+        id_of_buyer = cur.fetchall()[-1][0]
 
-    if not cur.fetchone():
-        print("Неверный логин или пароль")
-        should_continue = input("Похоже Вас нет в нашей системе, желаете зарегистрироваться?"
-                                "\nВведите '1' если да")
-        if should_continue == '1':
-            authorization()
+        if not cur.fetchone():
+            wrong_password()
+
         else:
-            sys.exit()
+            print('Добро пожаловать!')
+            return id_of_buyer
 
-    else:
-        print('Добро пожаловать!')
-        return
+    except IndexError:
+        wrong_password()
 
 
 # регистрация
@@ -71,12 +105,12 @@ def data_to_base(data_of_user, data_of_budget):  # ф-ия заносит дан
     cur.execute('SELECT userid FROM users')  # достаём файлы из колонки userid таблицы users
 
     try:
-        id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
+        id_num = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
     except IndexError:
-        id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
+        id_num = 1  # если таблица пустая, то индексу устанавливается значение 1
 
-    full_data = (id_number, str(data_of_user[0]), float(data_of_budget[1]), int(data_of_user[1]), str(data_of_user[2]),
-                 str(data_of_budget[1]))
+    full_data = (id_num, str(data_of_user[0]), float(data_of_budget[1]), int(data_of_user[1]), str(data_of_user[2]),
+                 float(data_of_budget[2]))
     cur.execute("INSERT INTO users (userid, name, budget, f_plan, password, accumulation) VALUES(?, ?, ?, ?, ?, ?)",
                 full_data)
     conn.commit()
@@ -139,7 +173,7 @@ def password():
 def authorization():  # функция авторизации, вводит никнейм и выбирает финансовый план
     name = input("Как к Вам обращаться? Введите имя: ")
     password_of_user = password()
-    print(password_of_user)
+
     try:
         finance_plan = int(input("Выберите Ваш финансовый план:\n"
                                  "Введите '1', если желаете сберегательный план\n"
@@ -167,9 +201,10 @@ def hello():
     elif are_you_exist == '2':
         user = authorization()
         main_data = data_input(user)
-        data_to_base(user, main_data)  # ф-ия заносит данные в бд: имя, ф-план, распределение и размер бюджета
+        id_user = data_to_base(user, main_data)
+        # ф-ия заносит данные в бд: имя, ф-план, распределение и размер бюджета|возвращает айди пользователя
         print('Поздравляю, Вы успешно зарегистрировались!')
-        # return должен возвращать userid
+        return id_user
 
 
 # Работа с БД
@@ -187,11 +222,13 @@ cur.execute("""CREATE TABLE IF NOT EXISTS users(
 conn.commit()
 
 cur.execute("""CREATE TABLE IF NOT EXISTS expenses(
-    userid INT PRIMARY KEY,
+    exp_id INT PRIMARY KEY,
+    userid INT,
     category_name TEXT,
     importance INT,
     costs REAL,
-    date_time DATETIME)
+    date TEXT,
+    time TEXT)
 """)  # importance: 1 - необходимое, 2 - развлечение
 
 conn.commit()
@@ -203,4 +240,9 @@ cur.close()
 # ###################################
 
 id_of_user = hello()
-get_new_data(id_of_user)
+ask = input('Желаете внести первые расходы? (да/нет): ')
+if ask == 'да':
+    get_new_data(id_of_user)
+else:
+    print('До встречи!)')
+    sys.exit()
