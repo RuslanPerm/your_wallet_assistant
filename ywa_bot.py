@@ -5,90 +5,146 @@ import datetime
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 
-def how_much_is_spent(event):
-    try:
-        try:  # так как программа устанавливает в userid только целочисленные значения,
-            # то пробуем узнать айди пользователя, если выдаст ошибку, значит пользователя не существует
-            user_id = int(event.object.message['from_id'])
+def does_user_exist(ev):
+    try:  # так как программа устанавливает в userid только целочисленные значения,
+        # то пробуем узнать айди пользователя, если выдаст ошибку, значит пользователя не существует
+        user_id = int(ev.object.message['from_id'])
+        return user_id
 
-        except TypeError:
-            return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
-                   '"как зарегестрироваться?"'
+    except TypeError:
+        return 1
 
+
+def my_bank(event):
+    user_id = does_user_exist(event)
+
+    if user_id == 1:
+        return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
+               '"как зарегестрироваться?"'
+    else:
         try:
-            date = event.object.message['text'].split()
-            lst = [date[i] + '-' for i in range(1, len(date))]
-            lst.reverse()
-            lst.append(date[0])
-            date = ''.join(lst)
+            conn = sqlite3.connect('database.db')  # подключение к бд
+            cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-        except TypeError:
-            spent = 0
+            cur.execute(f"SELECT accumulation FROM users WHERE userid = '{user_id}'")
+            # выбираем столбец сбережения где айди пользователя равен айди пользователя, который запрашивает
 
-        conn = sqlite3.connect('database.db')  # подключение к бд
-        cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+            user_acc = cur.fetchone()
 
-        cur.execute(f"SELECT category_name, costs, time FROM expenses WHERE date = '{user_id}'")
-        # выбираем столбец бюджет где дата равна запрашиваемой
+            return user_acc[0]
 
-        records = cur.fetchall()
-        lst_of_expenses = []
-        for exp in records:
-            lst_of_expenses.append(exp)
+        except sqlite3.Error as error:
+            print("Ошибка при работе с БД", error)
+            return "Ошибка сервера, приносим свои извинения, устроняем проблему"
 
-        conn.commit()
-        cur.close()
 
-        return lst_of_expenses
+def how_much_is_spent(event):
+    user_id = does_user_exist(event)
 
-    except sqlite3.Error as error:
-        print("Ошибка при работе с БД", error)
+    if user_id == 1:
+        return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
+               '"как зарегестрироваться?"'
+    else:
+        try:
+            date = 1
+            try:
+                #  преобразование сообщения пользователя в формат даты SQL
+                date = event.object.message['text'].split()[1::]  # отрезаем "за "
+                lst = [date[i] + '-' for i in range(1, len(date))]
+                lst.reverse()
+                lst.append(date[0])
+                date = ''.join(lst)
+                print(date)
+
+            except TypeError:
+                #  берём сообщение, преобразуем в список, убираем первое слово, преобразуем в строку
+                return f"Не припоминаю трат за {''.join(event.object.message['text'].split()[1::])}"
+
+            conn = sqlite3.connect('database.db')  # подключение к бд
+            cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+            if date == 1:
+                return 'Не припоминаю Ваших трат за это число'
+
+            cur.execute(f"SELECT category_name, costs, time, date FROM expenses WHERE userid = '{user_id}' AND '{date}'")
+            # выбираем столбец бюджет где дата равна запрашиваемой
+
+            #  берём записи о тратах из выбранной даты
+            records = cur.fetchall()
+            lst_of_expenses = []
+            for exp in records:
+                lst_of_expenses.append(exp)
+
+            conn.commit()
+            cur.close()
+
+            #  формируем ответ
+            # answer = []
+            # for exp in lst_of_expenses:
+            #       answer.append(f"\n{exp[1]} рублей на {exp[0]}, время покупки: {exp[2]}")
+            # ''.join(answer)
+            # return answer
+
+            vk.messages.send(user_id=event.obj['message']['from_id'],
+                             message=f"За {lst_of_expenses[0][3]} Вы потратили:",
+                             random_id=random.randint(0, 2 ** 64))
+            for exp in lst_of_expenses:
+                vk.messages.send(user_id=event.obj['message']['from_id'],
+                                 message=f"\n{exp[1]} рублей на {exp[0]}, время покупки: {exp[2]}",
+                                 random_id=random.randint(0, 2 ** 64))
+
+            vk.messages.send(user_id=event.obj['message']['from_id'],
+                             message="Это все траты, о которых Вы мне рассказали",
+                             random_id=random.randint(0, 2 ** 64))
+
+        except sqlite3.Error as error:
+            print("Ошибка при работе с БД", error)
+            return "Ошибка сервера, приносим свои извинения, устроняем проблему"
 
 
 def how_much_may_cost(event):
-    try:
-        try:  # так как программа устанавливает в userid только целочисленные значения,
-            # то пробуем узнать айди пользователя, если выдаст ошибку, значит пользователя не существует
-            user_id = int(event.object.message['from_id'])
+    user_id = does_user_exist(event)
 
-        except TypeError:
-            return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
-                   '"как зарегестрироваться?"'
+    if user_id == 1:
+        return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
+               '"как зарегестрироваться?"'
+    else:
+        try:
+            conn = sqlite3.connect('database.db')  # подключение к бд
+            cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-        conn = sqlite3.connect('database.db')  # подключение к бд
-        cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+            cur.execute(f"SELECT budget FROM users WHERE userid = '{user_id}'")  # выбираем столбец бюджет где айди
+            # равен айди написавшего пользователя
+            balance = cur.fetchone()[0]  # берём это значение
 
-        cur.execute(f"SELECT budget FROM users WHERE userid = '{user_id}'")  # выбираем столбец бюджет где айди
-        # равен айди написавшего пользователя
-        balance = cur.fetchone()[0]  # берём это значение
+            cur.execute(f"SELECT f_plan FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-план где айди
+            f_plan = cur.fetchone()[0]  # берём это значение
+            print(balance)
+            print(type(balance))
+            conn.commit()
+            cur.close()
 
-        cur.execute(f"SELECT f_plan FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-план где айди
-        f_plan = cur.fetchone()[0]  # берём это значение
-        print(balance)
-        print(type(balance))
-        conn.commit()
-        cur.close()
+            if f_plan == 1:
+                necessary = balance * 0.4
+                other = balance * 0.2
+                return [necessary, other]
 
-        if f_plan == 1:
-            necessary = balance * 0.4
-            other = balance * 0.2
-            return [necessary, other]
+            elif f_plan == 2:
+                necessary = balance * 0.5
+                other = balance * 0.2
+                return [necessary, other]
 
-        elif f_plan == 2:
-            necessary = balance * 0.5
-            other = balance * 0.2
-            return [necessary, other]
+            elif f_plan == 3:
+                necessary = balance * 0.5
+                other = balance * 0.4
+                return [necessary, other]
 
-        elif f_plan == 3:
-            necessary = balance * 0.5
-            other = balance * 0.4
-            return [necessary, other]
+            else:
+                return ["Произошла ошибка, к сожалению", ' пока не могу Вам ответить']
 
-        else:
-            return ["Произошла ошибка, к сожалению", ' пока не могу Вам ответить']
-
-    except sqlite3.Error as error:
-        print("Ошибка при работе с БД", error)
+        except sqlite3.Error as error:
+            print("Ошибка при работе с БД", error)
+            return "Ошибка сервера, приносим свои извинения, устроняем проблему"
 
 
 # def sub_category_id(cat_name):  # назначает id для подкатегории
@@ -114,30 +170,38 @@ def how_much_may_cost(event):
 
 
 def expenses(event):
-    try:
-        text = event.obj.message['text'].split()
+    user_id = does_user_exist(event)
 
-        conn = sqlite3.connect('database.db')  # подключение к бд
-        cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+    if user_id == 1:
+        return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
+               '"как зарегестрироваться?"'
+    else:
 
-        # exp_data = [event.object.message['from_id'], sub_category_id(text[3]), text[3], text[2], text[1],
-        #             str(datetime.datetime.now())[:-10:]]
+        try:
+            text = event.obj.message['text'].split()
 
-        exp_data = [event.object.message['from_id'], text[3], text[2], text[1],
-                    str(datetime.datetime.now())[:-16:], str(datetime.datetime.now())[10:-10:]]
+            conn = sqlite3.connect('database.db')  # подключение к бд
+            cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-        cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time) "
-                    "VALUES(?, ?, ?, ?, ?, ?)", exp_data)
+            # exp_data = [user_id, sub_category_id(text[3]), text[3], text[2], text[1],
+            #             str(datetime.datetime.now())[:-10:]]
 
-        # сделать чтобы вычитал из бюджета
+            exp_data = [user_id, text[3], text[2], text[1],
+                        str(datetime.datetime.now())[:-16:], str(datetime.datetime.now())[10:-10:]]
 
-        conn.commit()
-        cur.close()
+            cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time) "
+                        "VALUES(?, ?, ?, ?, ?, ?)", exp_data)
 
-        return f"Данные о трате успешно записаны!"
+            # сделать чтобы вычитал из бюджета
 
-    except sqlite3.Error as error:
-        print("Ошибка при работе с БД", error)
+            conn.commit()
+            cur.close()
+
+            return f"Данные о трате успешно записаны!"
+
+        except sqlite3.Error as error:
+            print("Ошибка при работе с БД", error)
+            return "Ошибка сервера, приносим свои извинения, устроняем проблему"
 
 
 def registration(event):
@@ -216,11 +280,11 @@ def main():
                                          '"потрачено <стоимость> <категория> <подкатегория>"\n'
                                          'Пример: "потрачено 100 1 продукты"\n\n'
                                          'Чтобы узнать сколько Вы можете потратить отправьте мне: '
-                                         '"сколько я могу потратить?"\n'
+                                         '"остаток"\n'
                                          'Чтобы узнать сколько Вы потратили за определённый день отправьте мне: '
-                                         '"сколько потрачено <дата>?"\n'
+                                         '"за <дата> (пример: за 22 11 1970)"\n'
                                          'Чтобы узнать сколько у Вас накоплений отправьте мне: '
-                                         '"сколько у меня сбережений?"',
+                                         '"сбережения"',
                                  random_id=random.randint(0, 2 ** 64))
 
             elif event.obj.message['text'].lower().startswith('потрачено'):
@@ -228,15 +292,21 @@ def main():
                                  message=expenses(event),
                                  random_id=random.randint(0, 2 ** 64))
 
-            elif event.obj.message['text'].lower().startswith('сколько я могу потратить'):
+            elif event.obj.message['text'].lower().startswith('остаток'):
                 vk.messages.send(user_id=event.obj['message']['from_id'],
                                  message=f'Вы можете потратить:\n{how_much_may_cost(event)[0]} на необходимые траты'
                                          f'\n{how_much_may_cost(event)[1]} на развлечения',
                                  random_id=random.randint(0, 2 ** 64))
 
-            elif event.obj.message['text'].lower().startswith('сколько потрачено за'):
+            elif event.obj.message['text'].lower().startswith('за'):
+                # vk.messages.send(user_id=event.obj['message']['from_id'],
+                #                  message=how_much_is_spent(event),
+                #                  random_id=random.randint(0, 2 ** 64))
+                how_much_is_spent(event)
+
+            elif event.obj.message['text'].lower().startswith('сбережения'):
                 vk.messages.send(user_id=event.obj['message']['from_id'],
-                                 message=how_much_is_spent(event),
+                                 message=my_bank(event),
                                  random_id=random.randint(0, 2 ** 64))
 
             else:
