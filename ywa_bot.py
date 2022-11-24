@@ -23,13 +23,13 @@ def does_user_exist(ev):
         return user_id
 
     except TypeError:
-        return 1
+        return 0.2
 
 
 def my_bank(event):
     user_id = does_user_exist(event)
 
-    if user_id == 1:
+    if user_id == 0.2:
         return 'Похоже Вы не зарегистрированы в системе, что бы зарегистрироваться напишите мне ' \
                '"как зарегестрироваться?"'
     else:
@@ -116,8 +116,6 @@ def how_much_may_cost(event):
 
             cur.execute(f"SELECT f_plan FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-план где айди
             f_plan = cur.fetchone()[0]  # берём это значение
-            print(balance)
-            print(type(balance))
             conn.commit()
             cur.close()
 
@@ -293,7 +291,7 @@ def main():
                       "4) 'сбережения?'\n\n" \
                       "Если Вы не зарегистрированы:\n\n" \
                       "1) 'как зарегистрироваться?'\n" \
-                      "2) 'зачем ты мне?" \
+                      "2) 'зачем ты мне?\n" \
                       "3) 'что ты умеешь?'"
                 answer(event, mes)
 
@@ -341,5 +339,3 @@ def main():
 # is_reg_right_now = 0
 if __name__ == '__main__':
     main()
-
-
