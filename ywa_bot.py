@@ -6,6 +6,8 @@ from modules_for_bot.h_m_i_s import how_much_is_spent
 from modules_for_bot.reg import registration
 from modules_for_bot.exp import expenses
 from modules_for_bot.bank import my_bank
+from modules_for_bot.data_of_user import about_me
+
 from modules_for_bot.utils import answer
 
 
@@ -67,6 +69,9 @@ def main():
 
             elif event.obj.message['text'].lower().startswith('сбережения'):
                 my_bank(event)
+
+            elif event.obj.message['text'].lower().startswith('обо мне'):
+                about_me(event)
 
 
 if __name__ == '__main__':
