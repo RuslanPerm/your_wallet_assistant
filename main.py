@@ -141,8 +141,6 @@ def budget_ratio(f_plan, capital, acc):
         other = 0.4 * capital
         return {"необходимое": necessary, "развлечения": other, "накопления": savings}
 
-    return 0
-
 
 # запрашивает информацию о бюджете пользователя
 def data_input(user_data):
@@ -161,9 +159,8 @@ def data_input(user_data):
 
 def password():
     user_password = input("Придумайте пароль: ")
-    if len(user_password) < 8:
-        password_alert = input("Пароль ненадёжный, пароль надёжный если в нём больше 8 символов"
-                               "\nВведите '1' чтобы придумать другой, либо '2' чтобы продолжить регистрацию")
+    if len(user_password) < 1:
+        password_alert = input("Пароль ненадёжный, введите другой")
         if password_alert == '1':
             return password()
 
@@ -217,7 +214,8 @@ cur.execute("""CREATE TABLE IF NOT EXISTS users(
     budget REAL,
     f_plan INTEGER,
     password TEXT,
-    accumulation REAL)
+    accumulation REAL
+    start_day TEXT)
 """)  # генерируем таблицу c данными о пользователе: номер в системе, имя, бюджет, финансовый план, пароль
 conn.commit()
 

@@ -277,21 +277,34 @@ def registration(event):
                       'по важности исключительно Ваш выбор')
 
         f_plan = take_mes()
-        answer(event, 'Установите пароль (более 8 символов) для входа в систему с приложения')
+        answer(event, 'Установите пароль для входа в систему с приложения')
         password = take_mes()
-        answer(event, 'Какой у вас бюджет на этот месяц?')
+        answer(event, 'Какой у Вас бюджет до дня зарплаты?')
         budget = take_mes()
-        answer(event, 'Скажите, у Вас есть какие либо сбережения уже (именно сбережения, а не бюджет),'
+        answer(event, 'Если у Вас фиксировано 1 раз в месяц выплата зарплаты, то когда у Вас день зарплаты?'
+                      '\n(Пример:\n13 [это будет значить, что каждый месяц 13ого числа Вам выплачивается заработная'
+                      ' плата и остаток прибавляется к сбережениям])\n\n'
+                      'Если у Вас бюджет пополняется с разной периодичностью, введите "."')
+        start_day = take_mes()
+        if start_day == '.':
+            start_day = None
+        else:
+            try:
+                int(start_day)
+            except TypeError:
+                answer(event, 'Я Вас не понимаю, нужно ввести число месяца, когда платится заработная плата')
+
+        answer(event, 'Скажите, у Вас есть какие либо сбережения уже (сколько у Вас отложено в копилке),'
                       ' если нет, введите 0')
         acc = take_mes()
-        full_data = [user_id, name, budget, f_plan, str(password), acc]
+        full_data = [user_id, name, budget, f_plan, str(password), acc, start_day]
 
         try:
             conn = sqlite3.connect('database.db')  # подключение к бд
             cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-            cur.execute("INSERT INTO users (userid, name, budget, f_plan, password, accumulation) "
-                        "VALUES(?, ?, ?, ?, ?, ?)", full_data)
+            cur.execute("INSERT INTO users (userid, name, budget, f_plan, password, accumulation, start_day) "
+                        "VALUES(?, ?, ?, ?, ?, ?, ?)", full_data)
             conn.commit()
             cur.close()
         except sqlite3.Error as error:
