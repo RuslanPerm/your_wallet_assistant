@@ -1,5 +1,5 @@
 import sqlite3
-from ywa_bot import take_mes, answer, error_with_smt, does_user_exist, check_type
+from utils import take_mes, answer, error_with_smt, does_user_exist, check_type
 
 
 def pass_word(event):

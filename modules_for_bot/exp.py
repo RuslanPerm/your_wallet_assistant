@@ -1,6 +1,6 @@
 import sqlite3
 import datetime
-from ywa_bot import does_user_exist, answer, take_mes, error_with_smt
+from utils import does_user_exist, answer, take_mes, error_with_smt
 
 
 def exp_id():

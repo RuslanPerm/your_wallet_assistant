@@ -1,5 +1,5 @@
 import sqlite3
-from ywa_bot import does_user_exist, answer, error_with_smt
+from utils import does_user_exist, answer, error_with_smt
 
 
 # функция, отвечающая сколько сбережений/накоплений у пользователя

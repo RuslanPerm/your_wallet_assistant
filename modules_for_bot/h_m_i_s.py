@@ -1,5 +1,5 @@
 import sqlite3
-from ywa_bot import answer, does_user_exist, error_with_smt
+from utils import answer, does_user_exist, error_with_smt
 
 
 def how_much_is_spent(event):
