@@ -38,8 +38,12 @@ def does_user_exist(ev):
         cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
         cur.execute(f"SELECT * FROM users WHERE userid = {user_id}")
         if cur.fetchall():
+            conn.commit()
+            cur.close()
             return user_id
         else:
+            conn.commit()
+            cur.close()
             return False
 
     except TypeError:
@@ -61,9 +65,10 @@ def my_bank(event):
             # выбираем столбец сбережения где айди пользователя равен айди пользователя, который запрашивает
 
             user_acc = cur.fetchone()
-
             answer(event, user_acc[0])
 
+            conn.commit()
+            cur.close()
         except sqlite3.Error as error:
             error_with_smt(event, error)
 
@@ -142,23 +147,37 @@ def how_much_may_cost(event):
             if f_plan == 1:
                 necessary = balance * 0.4
                 other = balance * 0.2
-                return [necessary, other]
+                answer(event, f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на другое')
 
             elif f_plan == 2:
                 necessary = balance * 0.5
                 other = balance * 0.2
-                return [necessary, other]
+                answer(event, f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на другое')
 
             elif f_plan == 3:
                 necessary = balance * 0.5
                 other = balance * 0.4
-                return [necessary, other]
-
+                answer(event, f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на другое')
             else:
                 error_with_smt(event, 'idk (ツ)')
 
         except sqlite3.Error as error:
             error_with_smt(event, error)
+
+
+def exp_id():
+    conn = sqlite3.connect('database.db')  # подключение к бд
+    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+    cur.execute(f"SELECT exp_id FROM expenses")
+    try:
+        id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
+    except IndexError:
+        id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
+
+    conn.commit()
+    cur.close()
+    return id_number
 
 
 def expenses(event):
@@ -170,43 +189,39 @@ def expenses(event):
     else:
         try:
             try:
-                cost = float(event.obj.message['text'])
+                cost = 0 - float(event.obj.message['text'])
+
+                exp_data = [user_id]
+                conn = sqlite3.connect('database.db')  # подключение к бд
+                cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+                answer(event, 'К какой категории хотите отнести эту трату?')
+                cat = str(take_mes())
+                exp_data.append(cat)
+
+                answer(event, 'Какая важность у этой траты: 1 - необходимое, 2 - развлечение')
+                try:
+                    exp_data.append(int(take_mes()))
+                except TypeError:
+                    answer(event, "Не понимаю, введите 1 если трата необходимая иначе 2 (пример: 1), попробуем снова")
+                    expenses(event)
+
+                exp_data.append(cost)
+                exp_data.append(str(datetime.datetime.now())[:-16:])  # записывает дату траты
+                exp_data.append(str(datetime.datetime.now())[10:-10:])  # записывает время траты
+                exp_data.append(exp_id())  # создаём новое айди
+
+                cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time, exp_id) "
+                            "VALUES(?, ?, ?, ?, ?, ?, ?)", exp_data)
+                # сделать чтобы айди траты заносилось или генирировалось
+                # сделать чтобы вычитал из бюджета
+
+                conn.commit()
+                cur.close()
+                answer(event, "Данные о трате успешно записаны!")
+
             except TypeError:
                 answer(event, 'Не понимаю, введите количество потраченных денежных единиц, введите ещё раз, пожалуйста')
-
-            exp_data = [user_id]
-            conn = sqlite3.connect('database.db')  # подключение к бд
-            cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
-
-            answer(event, 'К какой категории хотите отнести эту трату?')
-            exp_data.append(str(take_mes()))
-
-            answer(event, 'Какая важность у этой траты: 1 - необходимое, 2 - развлечение')
-            try:
-                exp_data.append(int(take_mes()))
-            except TypeError:
-                answer(event, "Не понимаю, введите 1 если трата необходимая иначе 2 (пример: 1), попробуем снова")
-                expenses(event)
-
-            # answer(event, "Сколько Вы потратили?")
-            # try:
-            #     exp_data.append(float(take_mes()))
-            # except TypeError:
-            #     answer(event, "Не понимаю, напишите количество денежных единиц Вы потратили (пример: 999.9)")
-            #     expenses(event)
-            exp_data.append(cost)
-            exp_data.append(str(datetime.datetime.now())[:-16:])  # записывает дату траты
-            exp_data.append(str(datetime.datetime.now())[10:-10:])  # записывает время траты
-
-            cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time) "
-                        "VALUES(?, ?, ?, ?, ?, ?)", exp_data)
-            # сделать чтобы айди траты заносилось или генирировалось
-            # сделать чтобы вычитал из бюджета
-
-            conn.commit()
-            cur.close()
-            answer(event, "Данные о трате успешно записаны!")
-
         except sqlite3.Error as error:
             error_with_smt(event, error)
 
@@ -335,10 +350,7 @@ def main():
                 expenses(event)
 
             elif event.obj.message['text'].lower().startswith('остаток'):
-                vk.messages.send(user_id=event.obj['message']['from_id'],
-                                 message=f'Вы можете потратить:\n{how_much_may_cost(event)[0]} на необходимые траты'
-                                         f'\n{how_much_may_cost(event)[1]} на развлечения',
-                                 random_id=random.randint(0, 2 ** 64))
+                how_much_may_cost(event)
 
             elif event.obj.message['text'].lower().startswith('за'):
                 how_much_is_spent(event)
@@ -346,11 +358,6 @@ def main():
             elif event.obj.message['text'].lower().startswith('сбережения'):
                 my_bank(event)
 
-            # else:
-            #     answer(event, "К сожалению, я могу лишь отвечать на установленные команды, "
-            #                   "чтобы увидеть список моих команд отправьте мне 'что ты умеешь?'")
 
-
-# is_reg_right_now = 0
 if __name__ == '__main__':
     main()
