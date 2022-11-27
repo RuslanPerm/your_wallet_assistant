@@ -217,7 +217,7 @@ cur.execute("""CREATE TABLE IF NOT EXISTS users(
     f_plan_c REAL,
     password TEXT,
     accumulation REAL,
-    start_day TEXT)
+    start_day INT)
 """)  # генерируем таблицу c данными о пользователе: номер в системе, имя, бюджет, финансовый план, пароль
 conn.commit()
 
