@@ -158,18 +158,18 @@ def about_me(event):
         conn = sqlite3.connect('database.db')  # подключение к бд
         cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-        cur.execute(f"SELECT FROM users WHERE userid = '{user_id}'")
+        cur.execute(f"SELECT * FROM users WHERE userid = '{user_id}'")
         # выбираем столбец с данными о пользователе
 
         #  берём записи о пользователе
-        data = cur.fetchall()
-        user_data = []
-        for elem in data:
-            user_data.append(elem)
+        user_data = list(cur.fetchall()[0])
+        # for elem in data:
+        #     user_data.append(elem)
 
+        print(user_data)
         answer(event, f'Ваше имя: {user_data[1]}\nВаш бюджет: {user_data[2]}\nИз них на необходимые траты: '
-                      f'{user_data[3]*user_data[2]}, на развлечения {user_data[4]*user_data[2]}, на накопления '
-                      f'{user_data[5]*user_data[2]}\nВсего накоплено: {user_data[6]}\nДень зарплаты: {user_data[7]}')
+                      f'{user_data[3]*user_data[2]}\nна развлечения {user_data[4]*user_data[2]}\nна накопления '
+                      f'{user_data[5]*user_data[2]}\nВсего накоплено: {user_data[7]}')
         answer(event, 'Хотите изменить какие-либо данные о себе?')
         if take_mes().lower() == 'да':
             edit_data()
@@ -249,7 +249,7 @@ def how_much_is_spent(event):
             if date == 1:
                 answer(event, 'Не припоминаю Ваших трат за это число')
 
-            cur.execute(f"SELECT category_name, costs, time, date FROM expenses WHERE userid = '{user_id}' AND '{date}'")
+            cur.execute(f"SELECT category_name,costs,time,date FROM expenses WHERE userid = '{user_id}' AND '{date}'")
             # выбираем столбец бюджет где дата равна запрашиваемой
 
             #  берём записи о тратах из выбранной даты
@@ -292,31 +292,16 @@ def how_much_may_cost(event):
             conn = sqlite3.connect('database.db')  # подключение к бд
             cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-            cur.execute(f"SELECT budget FROM users WHERE userid = '{user_id}'")  # выбираем столбец бюджет где айди
-            # равен айди написавшего пользователя
-            balance = cur.fetchone()[0]  # берём это значение
+            cur.execute(f"SELECT budget FROM users WHERE userid = '{user_id}'")  # выбираем столбец с бюджетом
+            budget = cur.fetchone()[0]  # берём это значение
 
-            cur.execute(f"SELECT f_plan FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-план где айди
-            user_f_plan = cur.fetchone()[0]  # берём это значение
+            cur.execute(f"SELECT f_plan_n FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-плана необх.
+            necessary = budget * cur.fetchone()[0]  # берём это значение
+            cur.execute(f"SELECT f_plan_n FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-плана развлеч.
+            other = budget * cur.fetchone()[0]  # берём это значение
             conn.commit()
             cur.close()
-
-            if user_f_plan == 1:
-                necessary = balance * 0.4
-                other = balance * 0.2
-                answer(event, f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на другое')
-
-            elif user_f_plan == 2:
-                necessary = balance * 0.5
-                other = balance * 0.2
-                answer(event, f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на другое')
-
-            elif user_f_plan == 3:
-                necessary = balance * 0.5
-                other = balance * 0.4
-                answer(event, f'Вы можете потратить:\n{necessary} на необходимые траты\n{other} на другое')
-            else:
-                error_with_smt(event, 'idk (ツ)')
+            answer(event, f'Вы можете потратить:\n{necessary}рублей на необходимое\n{other}рублей на развлечения')
 
         except sqlite3.Error as error:
             error_with_smt(event, error)
