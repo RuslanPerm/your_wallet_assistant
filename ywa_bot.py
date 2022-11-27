@@ -119,11 +119,11 @@ def reset(event):
             all_exps += sum(exp)
 
         acc += (start_budget - all_exps + start_budget * f_plan_c)
-        cur.execute(f"UPDATE users SET accumulation = {acc}")
+        cur.execute(f"UPDATE users SET accumulation = {acc} WHERE userid = {user_id}")
 
-        answer(event, 'Какой у Вас бюджет до следующей зарплаты?')
+        answer(event, 'Ого, зарплата это всегда приятно, какой у Вас бюджет до следующей зарплаты?')
         new_budget = check_type(event, 'float', 'Не понимаю Вас, нужно количество рублей у вас до следующей зарплаты')
-        cur.execute(f"UPDATE users SET budget = {new_budget}")
+        cur.execute(f"UPDATE users SET budget = {new_budget} WHERE userid = {user_id}")
 
         answer(event, f'Хорошо, Ваш бюджет обновлён (теперь там {new_budget} рублей), а остаток от бюджета перенесён'
                       f' в накопления, теперь у вас в сбережениях {acc} рублей')
@@ -145,8 +145,134 @@ def reset(event):
 # ************************************************DATA OF USER********************************************
 # ************************************************DATA OF USER********************************************
 # ************************************************DATA OF USER********************************************
-def edit_data():
-    pass
+
+# изменяем данные о пользователе
+def edit_data(event):
+    user_id = does_user_exist(event)
+
+    answer(event, 'Выберите какие данные хотите изменить:\n1. Имя\n2. Бюджет\n3. Финансовый план\n4. Пароль\n'
+                  '5. Добавить деньги в сбережения\n6. Забрать деньги из сбережений\n7. Всё\n\n'
+                  'Введите номер соответствующего пункта')
+
+    user_answer = check_type(event, 'integer', 'Я Вас не понял, нужно ввести номер пункта, который Вы хотите изменить')
+
+    conn = sqlite3.connect('database.db')  # подключение к бд
+    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+    if user_answer == 1:
+        answer(event, 'Как мне к Вам теперь обращаться?')
+        name = take_mes()
+
+        cur.execute(f"UPDATE users SET name = {name} WHERE userid = {user_id}")  # обновляем имя
+        answer(event, f'Отлично, теперь Ваше имя {name}')
+        conn.commit()
+        cur.close()
+
+    elif user_answer == 2:
+        answer(event, 'Если Вам пришла зарплата или иной доход следует написать мне "день зп", тогда я тоже обновлю'
+                      'бюджет, но разница в том, что тогда остаток бюджета переведу в сбережения')
+        answer(event, 'Записать как зарплату?')
+
+        should_continue = take_mes().lower()
+        if should_continue == 'да':
+            reset(event)
+            conn.commit()
+            cur.close()
+            return 0
+        else:
+            answer(event, 'Какой у Вас теперь бюджет?')
+            new_budget = check_type(event, 'float', 'Не понимаю Вас, нужно написать сколько рублей в Вашем новом '
+                                                    'бюджете')
+
+            conn = sqlite3.connect('database.db')  # подключение к бд
+            cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+            cur.execute(f"UPDATE users SET budget = {new_budget} WHERE userid = {user_id}")  # обновляем budget
+            answer(event, f'Отлично, теперь Ваш бюджет {new_budget} рублей')
+            conn.commit()
+            cur.close()
+
+    elif user_answer == 3:
+        fin_plan = f_plan(event)
+
+        cur.execute(f"UPDATE users SET f_plan_n = {fin_plan[0]} WHERE userid = {user_id}")  # обновляем f_plan_n
+        cur.execute(f"UPDATE users SET f_plan_o = {fin_plan[1]} WHERE userid = {user_id}")  # обновляем f_plan_o
+        cur.execute(f"UPDATE users SET f_plan_c = {fin_plan[2]} WHERE userid = {user_id}")  # обновляем f_plan_c
+        answer(event, f'Отлично, теперь у Вас {fin_plan[0]*100} на небходимое, {fin_plan[1]*100} на другое, '
+                      f'{fin_plan[2]*100} на накопления')
+        conn.commit()
+        cur.close()
+
+    elif user_answer == 4:
+        cur.execute(f"SELECT password FROM users WHERE userid = {user_id}")
+        old_password = cur.fetchone()
+
+        answer(event, 'Введите старый пароль')
+        check_password = take_mes()
+        if old_password == check_password:
+            answer(event, 'Пароль верный, теперь придумайте новый')
+            new_password = pass_word(event)
+            cur.execute(f"UPDATE users SET password = {new_password} WHERE userid = {user_id}")  # обновляем пароль
+            answer(event, "Новый пароль сохранён")
+        else:
+            answer(event, 'Пароль неверный')
+
+    elif user_answer == 5:
+        answer(event, 'Сколько добавить к накоплениям?')
+        add_acc = check_type(event, 'float', 'Не понимаю Вас, скажите сколько рублей Вы хотите добавить к сбережениям')
+
+        cur.execute(f"SELECT accumulation FROM users WHERE userid = {user_id}")  # берём старые накопления
+        acc = cur.fetchone()
+        new_acc = acc + add_acc
+
+        cur.execute(f"UPDATE users SET name = {new_acc} WHERE userid = {user_id}")  # обновляем накопления
+        answer(event, f'Отлично, у Вас было {acc} в копилке, теперь {new_acc}')
+        conn.commit()
+        cur.close()
+
+    elif user_answer == 6:
+        answer(event, 'Сколько вычесть из накоплений?')
+        add_acc = check_type(event, 'float', 'Не понимаю Вас, скажите сколько рублей Вы хотите вычесть из сбережений')
+
+        cur.execute(f"SELECT accumulation FROM users WHERE userid = {user_id} рублей")  # берём старые накопления
+        acc = cur.fetchone()
+        new_acc = acc - add_acc
+
+        cur.execute(f"UPDATE users SET name = {new_acc} WHERE userid = {user_id}")  # обновляем накопления
+        answer(event, f'Данные изменены, у Вас было {acc} в копилке, теперь {new_acc} рублей')
+        conn.commit()
+        cur.close()
+
+    elif user_answer == 7:
+        answer(event, 'Как мне к вам обращаться?')
+        name = take_mes()
+
+        answer(event, 'Ваш бюджет?')
+        budget = check_type(event, 'float', 'Не понимаю Вас, нужно написать сколько рублей в Вашем бюджете?')
+
+        fin_plan = f_plan(event)
+
+        answer(event, 'Сколько у Вас накоплений?')
+        acc = check_type(event, 'float', 'Не понимаю Вас, нужно написать сколько рублей у Вас в сбережениях')
+
+        answer(event, 'Придумайте пароль')
+        password = pass_word(event)
+
+        cur.execute(f"UPDATE users SET name = {name} WHERE userid = {user_id}")  # обновляем имя
+        cur.execute(f"UPDATE users SET budget = {budget} WHERE userid = {user_id}")  # обновляем budget
+        cur.execute(f"UPDATE users SET f_plan_n = {fin_plan[0]} WHERE userid = {user_id}")  # обновляем f_plan_n
+        cur.execute(f"UPDATE users SET f_plan_o = {fin_plan[1]} WHERE userid = {user_id}")  # обновляем f_plan_o
+        cur.execute(f"UPDATE users SET f_plan_c = {fin_plan[2]} WHERE userid = {user_id}")  # обновляем f_plan_c
+        cur.execute(f"UPDATE users SET password = {password} WHERE userid = {user_id}")  # обновляем пароль
+        cur.execute(f"UPDATE users SET name = {acc} WHERE userid = {user_id}")  # обновляем накопления
+
+        conn.commit()
+        cur.close()
+
+        answer(event, 'Отлично все данные изменены, а расходы сохранены!')
+
+    else:
+        answer(event, 'Не понимаю Вас, нужно выбрать один из предложенных пунктов и написать его номер мне')
+        edit_data(event)
 
 
 def about_me(event):
@@ -172,7 +298,7 @@ def about_me(event):
                       f'{user_data[5]*user_data[2]}\nВсего накоплено: {user_data[7]}')
         answer(event, 'Хотите изменить какие-либо данные о себе?')
         if take_mes().lower() == 'да':
-            edit_data()
+            edit_data(event)
         else:
             answer(event, 'Что ж, ответ не похож на "да", поэтому сохраню данные')
 
@@ -549,7 +675,7 @@ def main():
                       "Если Вы зарегистрированы в системе 'Ваш финансовый помощник':\n\n" \
                       "1) '-<число> (пример: -999.99)'\n" \
                       "2) 'остаток'\n" \
-                      "3) 'за <дата>'\n" \
+                      "3) 'сколько за <дата>'\n" \
                       "4) 'сбережения'\n\n" \
                       "Если Вы не зарегистрированы:\n\n" \
                       "1) 'как зарегистрироваться?'\n" \
@@ -583,7 +709,7 @@ def main():
             elif event.obj.message['text'].lower().startswith('остаток'):
                 how_much_may_cost(event)
 
-            elif event.obj.message['text'].lower().startswith('за'):
+            elif event.obj.message['text'].lower().startswith('сколько за'):
                 how_much_is_spent(event)
 
             elif event.obj.message['text'].lower().startswith('сбережения'):
