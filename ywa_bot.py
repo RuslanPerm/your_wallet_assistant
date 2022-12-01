@@ -110,7 +110,7 @@ def reset(event):
         start_budget = sum(cur.fetchone())
         cur.execute(f'SELECT f_plan_c FROM users WHERE userid = {user_id}')
         f_plan_c = sum(cur.fetchone())
-        cur.execute(f'SELECT costs budget FROM expenses WHERE userid = {user_id}')  # добавить чтоб только за месяц
+        cur.execute(f'SELECT costs budget FROM expenses WHERE userid = {user_id}')
         # архивную таблицу сделать
 
         exps = cur.fetchall()
@@ -124,6 +124,13 @@ def reset(event):
         answer(event, 'Ого, зарплата это всегда приятно, какой у Вас бюджет до следующей зарплаты?')
         new_budget = check_type(event, 'float', 'Не понимаю Вас, нужно количество рублей у вас до следующей зарплаты')
         cur.execute(f"UPDATE users SET budget = {new_budget} WHERE userid = {user_id}")
+
+        pay_day = str(datetime.datetime.now())[:-16:]  # записывает дату обновления бюджета
+        cur.execute(f"UPDATE users SET pay_time = '{pay_day}' WHERE userid = {user_id}")
+
+        pay_time = str(datetime.datetime.now())[11:-10:]  # записывает время обновления бюджета
+        print(pay_time, pay_day)
+        cur.execute(f"UPDATE users SET pay_time = '{pay_time}' WHERE userid = {user_id}")
 
         answer(event, f'Хорошо, Ваш бюджет обновлён (теперь там {new_budget} рублей), а остаток от бюджета перенесён'
                       f' в накопления, теперь у вас в сбережениях {acc} рублей')
@@ -204,7 +211,8 @@ def edit_data(event):
 
     elif user_answer == 4:
         cur.execute(f"SELECT password FROM users WHERE userid = {user_id}")
-        old_password = cur.fetchone()
+        old_password = cur.fetchone()[6]  # пароль в список
+        print(old_password)
 
         answer(event, 'Введите старый пароль')
         check_password = take_mes()
@@ -222,9 +230,9 @@ def edit_data(event):
 
         cur.execute(f"SELECT accumulation FROM users WHERE userid = {user_id}")  # берём старые накопления
         acc = cur.fetchone()
-        new_acc = acc + add_acc
+        new_acc = sum(acc) + add_acc
 
-        cur.execute(f"UPDATE users SET name = {new_acc} WHERE userid = {user_id}")  # обновляем накопления
+        cur.execute(f"UPDATE users SET accumulation = {new_acc} WHERE userid = {user_id}")  # обновляем накопления
         answer(event, f'Отлично, у Вас было {acc} в копилке, теперь {new_acc}')
         conn.commit()
         cur.close()
@@ -233,11 +241,11 @@ def edit_data(event):
         answer(event, 'Сколько вычесть из накоплений?')
         add_acc = check_type(event, 'float', 'Не понимаю Вас, скажите сколько рублей Вы хотите вычесть из сбережений')
 
-        cur.execute(f"SELECT accumulation FROM users WHERE userid = {user_id} рублей")  # берём старые накопления
+        cur.execute(f"SELECT accumulation FROM users WHERE userid = {user_id}")  # берём старые накопления
         acc = cur.fetchone()
-        new_acc = acc - add_acc
+        new_acc = sum(acc) - add_acc
 
-        cur.execute(f"UPDATE users SET name = {new_acc} WHERE userid = {user_id}")  # обновляем накопления
+        cur.execute(f"UPDATE users SET accumulation = {new_acc} WHERE userid = {user_id}")  # обновляем накопления
         answer(event, f'Данные изменены, у Вас было {acc} в копилке, теперь {new_acc} рублей')
         conn.commit()
         cur.close()
@@ -418,16 +426,112 @@ def how_much_may_cost(event):
             conn = sqlite3.connect('database.db')  # подключение к бд
             cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
-            cur.execute(f"SELECT budget FROM users WHERE userid = '{user_id}'")  # выбираем столбец с бюджетом
-            budget = cur.fetchone()[0]  # берём это значение
+            # берём exp_id всех покупок пользователя
+            cur.execute(f"SELECT exp_id FROM expenses WHERE userid = {user_id}")
+            buys_id = cur.fetchall()
+            buys_id_lst = [int(elem[0]) for elem in buys_id]
 
-            cur.execute(f"SELECT f_plan_n FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-плана необх.
-            necessary = budget * cur.fetchone()[0]  # берём это значение
-            cur.execute(f"SELECT f_plan_n FROM users WHERE userid = '{user_id}'")  # выбираем столбец ф-плана развлеч.
-            other = budget * cur.fetchone()[0]  # берём это значение
+            # берём даты покупок
+            cur.execute(f"SELECT date FROM expenses WHERE userid = {user_id}")
+            buy_dates = cur.fetchall()
+            buy_dates_lst = [str(elem[0]) for elem in buy_dates]
+
+            # берём время покупок
+            cur.execute(f"SELECT time FROM expenses WHERE userid = {user_id}")
+            buy_times = cur.fetchall()
+            buy_times_lst = [str(elem[0]) for elem in buy_times]
+
+            # берём дату обновления бюджета
+            cur.execute(f"SELECT pay_day FROM users WHERE userid = {user_id}")
+            pay_day = str(cur.fetchone()[0])
+
+            # берём время обновления бюджета
+            cur.execute(f"SELECT pay_time FROM users WHERE userid = {user_id}")
+            pay_time = str(cur.fetchone()[0])
+
+            # создаём список покупок после последнего обновления бюджета
+            buys_after_updating_budget = []
+
+            # проходимся по всем покупкам, используем номер элемента так как 2 списка: времени и дат
+            for num in range(len(buy_dates_lst)):
+                # если год траты больше года обновления бюджета
+                if int(pay_day[:4:]) < int(buy_dates_lst[num][:4:]):
+                    # то покупка подходит, записываем в список id
+                    buys_after_updating_budget.append(buys_id_lst[num])
+
+                # если год траты равен году обновления бюджета
+                elif int(pay_day[:4:]) == int(buy_dates_lst[num][:4:]):
+                    # если месяц траты больше месяца обновления бюджета
+                    if int(pay_day[5:7:]) < int(buy_dates_lst[num][5:7:]):
+                        # то покупка подходит, записываем в список id
+                        buys_after_updating_budget.append(buys_id_lst[num])
+
+                    # если месяц траты равен месяцу обновления бюджета
+                    elif int(pay_day[5:7:]) == int(buy_dates_lst[num][5:7:]):
+                        # если день траты больше дня обновления бюджета
+                        if pay_day[8:10:] < buy_dates_lst[num][8:10:]:
+                            # то покупка подходит, записываем в список id
+                            buys_after_updating_budget.append(buys_id_lst[num])
+
+                        # если день траты равен дню обновления бюджета
+                        elif int(pay_day[8:10:]) == int(buy_dates_lst[num][8:10:]):
+                            # если часы траты больше часов обновления бюджета
+                            if int(pay_time[:2:]) < int(buy_times_lst[num][:2:]):
+                                # то покупка подходит, записываем в список id
+                                buys_after_updating_budget.append(buys_id_lst[num])
+
+                            # если часы траты равны часам обновления бюджета
+                            elif int(pay_time[:2:]) == int(buy_times_lst[num][:2:]):
+                                # если минуты траты больше минут обновления бюджета
+                                if int(pay_time[3:5:]) < int(buy_times_lst[num][3:5:]):
+                                    # то покупка подходит, записываем в список id
+                                    buys_after_updating_budget.append(buys_id_lst[num])
+                # print(buys_after_updating_budget)
+
+            cur.execute(f"SELECT budget, f_plan_n, f_plan_o FROM users WHERE userid = {user_id}")
+            data_lst = cur.fetchall()[0]
+            start_budget = float(data_lst[0])
+            f_plan_n = float(data_lst[1])
+            f_plan_o = float(data_lst[2])
+
+            # создаём итоговые расходы на необходимое и другое
+            finish_cost_necessary = 0
+            finish_cost_others = 0
+
+            used_id_lst = []  # список id, использованных на необходимое
+
+            # проходимся по всем выбранным покупкам, ищем в бд, если такой же айди и важность равна 1, то добавляем
+            # в finish_cost_necessary, иначе в finish_costs_others
+            for id_num in buys_after_updating_budget:
+                cur.execute(f"SELECT exp_id, costs FROM expenses WHERE exp_id = {id_num} "
+                            f"AND importance = 1")  # берём цену и айди, чтобы айди потом убрать из списка
+
+                # преобразовать
+                try:
+                    add_cost_and_id = cur.fetchall()[0]
+                    finish_cost_necessary += float(add_cost_and_id[1])  # берём только цену и прибавляем к финальной
+                    used_id_lst.append(int(add_cost_and_id[0]))  # берём айди и добавляем в список использованных
+                except IndexError:
+                    continue
+
+            # избавляемся от использованных id
+            not_used_id_lst = list(set(buys_after_updating_budget) - set(used_id_lst))
+
+            for id_num in not_used_id_lst:
+                # берём цену оставшихся трат
+                cur.execute(f"SELECT costs FROM expenses WHERE exp_id = {id_num}")
+                finish_cost_others += float(cur.fetchone()[0])
+
+            # вычитаем из бюджета сколько выделено в накопления и на другое, затем вычетаем
+            # сколько уже потрачено на необходимое
+            may_cost_n = start_budget * f_plan_n - finish_cost_necessary
+            may_cost_o = start_budget * f_plan_o - finish_cost_others
+
+            answer(event, f'Вы можете потратить:\n{round(may_cost_n, 2)} рублей на необходимое\n'
+                          f'{round(may_cost_o, 2)} рублей на развлечения')
+
             conn.commit()
             cur.close()
-            answer(event, f'Вы можете потратить:\n{necessary}рублей на необходимое\n{other}рублей на развлечения')
 
         except sqlite3.Error as error:
             error_with_smt(event, error)
@@ -467,7 +571,8 @@ def expenses(event):
     else:
         try:
             try:
-                cost = 0 - float(event.obj.message['text'])
+                cost_1 = float(event.obj.message['text'])
+                cost = 0 - cost_1
 
                 exp_data = [user_id]
                 conn = sqlite3.connect('database.db')  # подключение к бд
@@ -478,16 +583,15 @@ def expenses(event):
                 exp_data.append(cat)
 
                 answer(event, 'Какая важность у этой траты: 1 - необходимое, 2 - развлечение')
-                try:
-                    exp_data.append(int(take_mes()))
-                except TypeError:
-                    answer(event, "Не понимаю, введите 1 если трата необходимая иначе 2 (пример: 1), попробуем снова")
-                    expenses(event)
+
+                exp_data.append(check_type(event, 'integer', 'Не понимаю, введите 1 если трата необходимая иначе 2'
+                                                             ' (пример: 1)'))
 
                 exp_data.append(cost)
                 exp_data.append(str(datetime.datetime.now())[:-16:])  # записывает дату траты
-                exp_data.append(str(datetime.datetime.now())[10:-10:])  # записывает время траты
+                exp_data.append(str(datetime.datetime.now())[11:-10:])  # записывает время траты
                 exp_data.append(exp_id())  # создаём новое айди
+                print(exp_data)
 
                 cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time, exp_id) "
                             "VALUES(?, ?, ?, ?, ?, ?, ?)", exp_data)
@@ -496,8 +600,8 @@ def expenses(event):
                 cur.close()
                 answer(event, "Данные о трате успешно записаны!")
 
-            except TypeError:
-                answer(event, 'Не понимаю, введите количество потраченных денежных единиц, введите ещё раз, пожалуйста')
+            except ValueError:
+                answer(event, 'Не понимаю, введите трату ещё раз количество затраченных денег, пожалуйста')
         except sqlite3.Error as error:
             error_with_smt(event, error)
 # **************************************************************************************************
@@ -615,19 +719,6 @@ def registration(event):
         answer(event, 'Установите пароль для входа в систему с приложения на компьютере')
         password = pass_word(event)
 
-        # answer(event, 'Если у Вас фиксировано 1 раз в месяц выплата зарплаты, то когда у Вас день зарплаты?'
-        #               '\n(Пример: 13\n[это будет значить, что каждый месяц 13ого числа Вам выплачивается заработная'
-        #               ' плата и остаток прибавляется к сбережениям])\n\n'
-        #               'Если у Вас бюджет пополняется с разной периодичностью, введите "0"')
-        #
-        # start_day = check_type(event, 'integer', 'Я Вас не понимаю, нужно ввести число месяца, когда выплачивается '
-        #                                          'заработная плата')
-        # if (start_day < 1) or (start_day > 28):
-        #     start_day = None
-        #     if start_day != 0:
-        #         answer(event, 'По моим данным, ЗП в большинстве случаев выплачивают с 1ого по 28ое число каждого '
-        #                       'месяца, поэтому Вам придётся вручную обновлять бюджет в день ЗП')
-
         answer(event, 'Какой у Вас бюджет до дня зарплаты?')
         budget = check_type(event, 'float', 'Я Вас не понимаю, нужно ввести количество денежных единиц, '
                                             'которые Вы можете потратить до дня зарплаты')
@@ -637,14 +728,17 @@ def registration(event):
         acc = check_type(event, 'float', 'Я Вас не понимаю, нужно ввести количество денежных единиц, '
                                          'которые сейчас лежат у вас накопленях')
 
-        full_data = [user_id, name, budget, necessary, other, capital, str(password), acc]
+        reg_date = str(datetime.datetime.now())[:-16:]  # дата регистрации
+        reg_time = str(datetime.datetime.now())[11:-10:]  # время регистрации
+
+        full_data = [user_id, name, budget, necessary, other, capital, str(password), acc, reg_date, reg_time]
 
         try:
             conn = sqlite3.connect('database.db')  # подключение к бд
             cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
             cur.execute("INSERT INTO users (userid, name, budget, f_plan_n, f_plan_o, f_plan_c, password, "
-                        "accumulation) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", full_data)
+                        "accumulation, pay_day, pay_time) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", full_data)
             answer(event, f'Приятно познакомиться, {name}, Вы успешно зарегистрированы!')
             conn.commit()
             cur.close()
@@ -668,8 +762,7 @@ def main():
             global vk
             vk = vk_session.get_api()
 
-            if event.obj.message['text'].lower().startswith('привет') or \
-                    event.obj.message['text'].lower().startswith('здравствуй'):
+            if event.obj.message['text'].lower().startswith('привет'):
                 mes = "Приветствую, я воспринимаю лишь следующие команды (Если я тебя не пойму, " \
                       "то соответственно не отвечу!):\n\n " \
                       "Если Вы зарегистрированы в системе 'Ваш финансовый помощник':\n\n" \
@@ -701,7 +794,8 @@ def main():
                               'Чтобы узнать сколько Вы потратили за определённый день отправьте мне:\n'
                               '"за <дата> (пример: за 22 11 1970)"\n'
                               'Чтобы узнать сколько у Вас накоплений отправьте мне: '
-                              '"сбережения"')
+                              '"сбережения"'
+                              'Чтобы узнать информацию о себе отправь мне "обо мне "')
 
             elif event.obj.message['text'].lower().startswith('-'):
                 expenses(event)
