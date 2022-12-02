@@ -111,25 +111,27 @@ def reset(event):
         cur.execute(f'SELECT f_plan_c FROM users WHERE userid = {user_id}')
         f_plan_c = sum(cur.fetchone())
         cur.execute(f'SELECT costs budget FROM expenses WHERE userid = {user_id}')
-        # архивную таблицу сделать
 
         exps = cur.fetchall()
         all_exps = 0
         for exp in exps:
             all_exps += sum(exp)
 
+        # добавляем к накоплениям остаток от прошлого бюджета
         acc += (start_budget - all_exps + start_budget * f_plan_c)
         cur.execute(f"UPDATE users SET accumulation = {acc} WHERE userid = {user_id}")
 
         answer(event, 'Ого, зарплата это всегда приятно, какой у Вас бюджет до следующей зарплаты?')
+        # заносим новый бюджет
         new_budget = check_type(event, 'float', 'Не понимаю Вас, нужно количество рублей у вас до следующей зарплаты')
         cur.execute(f"UPDATE users SET budget = {new_budget} WHERE userid = {user_id}")
 
+        # заносим новую дату "зарплаты"
         pay_day = str(datetime.datetime.now())[:-16:]  # записывает дату обновления бюджета
         cur.execute(f"UPDATE users SET pay_time = '{pay_day}' WHERE userid = {user_id}")
 
+        # заносим новое время "зарплаты"
         pay_time = str(datetime.datetime.now())[11:-10:]  # записывает время обновления бюджета
-        print(pay_time, pay_day)
         cur.execute(f"UPDATE users SET pay_time = '{pay_time}' WHERE userid = {user_id}")
 
         answer(event, f'Хорошо, Ваш бюджет обновлён (теперь там {new_budget} рублей), а остаток от бюджета перенесён'
@@ -300,7 +302,6 @@ def about_me(event):
         # for elem in data:
         #     user_data.append(elem)
 
-        print(user_data)
         answer(event, f'Ваше имя: {user_data[1]}\nВаш бюджет: {user_data[2]}\nИз них на необходимые траты: '
                       f'{user_data[3]*user_data[2]}\nна развлечения {user_data[4]*user_data[2]}\nна накопления '
                       f'{user_data[5]*user_data[2]}\nВсего накоплено: {user_data[7]}')
@@ -371,7 +372,6 @@ def how_much_is_spent(event):
                 lst.reverse()
                 lst.append(date[0])
                 date = ''.join(lst)
-                print(date)
 
             except TypeError:
                 #  берём сообщение, преобразуем в список, убираем первое слово, преобразуем в строку
@@ -486,7 +486,6 @@ def how_much_may_cost(event):
                                 if int(pay_time[3:5:]) < int(buy_times_lst[num][3:5:]):
                                     # то покупка подходит, записываем в список id
                                     buys_after_updating_budget.append(buys_id_lst[num])
-                # print(buys_after_updating_budget)
 
             cur.execute(f"SELECT budget, f_plan_n, f_plan_o FROM users WHERE userid = {user_id}")
             data_lst = cur.fetchall()[0]
@@ -547,6 +546,37 @@ def how_much_may_cost(event):
 # *****************************************EXPENSES*****************************************************
 # *****************************************EXPENSES*****************************************************
 # *****************************************EXPENSES*****************************************************
+def replace_comma_to_point(message):
+    count_commas = 0
+    lst_mes = [elem for elem in message]  # преобразуем в список, чтобы можно было поменять элементы
+
+    for i in range(len(lst_mes)):
+        if lst_mes[i] == ',':  # если находим запятую в сообщении, то заменяем её на точку
+            if count_commas == 0:  # если ещё не было запятых, то меняем её на точку
+                count_commas += 1
+                lst_mes[i] = '.'
+            else:  # если запятые уже были, значит пользователь ошибся, возвращаем его сообщение,
+                # дальше обработчик сам определит, что там ошибка и попросит ввести снова
+                return message
+    message = ''.join(lst_mes)
+    return message
+
+
+def exp_change_id():
+    conn = sqlite3.connect('database.db')  # подключение к бд
+    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+    cur.execute(f"SELECT changing_id FROM archive_expenses")
+    try:
+        id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
+    except IndexError:
+        id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
+
+    conn.commit()
+    cur.close()
+    return id_number
+
+
 def exp_id():
     conn = sqlite3.connect('database.db')  # подключение к бд
     cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
@@ -571,7 +601,8 @@ def expenses(event):
     else:
         try:
             try:
-                cost_1 = float(event.obj.message['text'])
+                message = replace_comma_to_point(event.obj.message['text'])  # функция заменяющая запятую на точку
+                cost_1 = round(float(message), 2)
                 cost = 0 - cost_1
 
                 exp_data = [user_id]
@@ -591,10 +622,17 @@ def expenses(event):
                 exp_data.append(str(datetime.datetime.now())[:-16:])  # записывает дату траты
                 exp_data.append(str(datetime.datetime.now())[11:-10:])  # записывает время траты
                 exp_data.append(exp_id())  # создаём новое айди
-                print(exp_data)
 
                 cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time, exp_id) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?)", exp_data)
+                            "VALUES(?, ?, ?, ?, ?, ?, ?)", exp_data)  # добавляем данные в таблицу трат
+
+                exp_data_a = exp_data.copy()
+                exp_data_a.append(exp_change_id())
+
+                cur.execute(
+                    "INSERT INTO archive_users (userid, category_name, importance, costs, date, time, "
+                    "exp_id, changing_time) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?)", exp_data_a)  # добавляем данные в архив-таблицу трат
 
                 conn.commit()
                 cur.close()
@@ -616,6 +654,21 @@ def expenses(event):
 # **************************************REGISTRATION************************************************
 # **************************************REGISTRATION************************************************
 # **************************************REGISTRATION************************************************
+def users_change_id():
+    conn = sqlite3.connect('database.db')  # подключение к бд
+    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
+
+    cur.execute(f"SELECT changing_id FROM archive_users")
+    try:
+        id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
+    except IndexError:
+        id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
+
+    conn.commit()
+    cur.close()
+    return id_number
+
+
 def pass_word(event):
     password = take_mes()
     if password:
@@ -717,7 +770,7 @@ def registration(event):
         capital = fin_plan[2]
 
         answer(event, 'Установите пароль для входа в систему с приложения на компьютере')
-        password = pass_word(event)
+        password = str(pass_word(event))
 
         answer(event, 'Какой у Вас бюджет до дня зарплаты?')
         budget = check_type(event, 'float', 'Я Вас не понимаю, нужно ввести количество денежных единиц, '
@@ -731,17 +784,30 @@ def registration(event):
         reg_date = str(datetime.datetime.now())[:-16:]  # дата регистрации
         reg_time = str(datetime.datetime.now())[11:-10:]  # время регистрации
 
-        full_data = [user_id, name, budget, necessary, other, capital, str(password), acc, reg_date, reg_time]
+        # данные для таблицы
+        full_data = [user_id, name, budget, necessary, other, capital, password, acc, reg_date, reg_time]
+
+        # данные для архивной таблицы
+        change_id = users_change_id()  # генерирует id
+        full_data_a = [change_id, user_id, name, budget, necessary, other, capital, password, acc, reg_date, reg_time]
 
         try:
             conn = sqlite3.connect('database.db')  # подключение к бд
             cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
 
+            # добавляем данные в таблицу пользователей
             cur.execute("INSERT INTO users (userid, name, budget, f_plan_n, f_plan_o, f_plan_c, password, "
                         "accumulation, pay_day, pay_time) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", full_data)
+
+            # добавляем данные в архив-таблицу пользователей
+            cur.execute("INSERT INTO archive_users (changing_id, userid, name, budget, f_plan_n, f_plan_o, f_plan_c,"
+                        " password, accumulation, pay_day, pay_time) "
+                        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", full_data_a)
+
             answer(event, f'Приятно познакомиться, {name}, Вы успешно зарегистрированы!')
             conn.commit()
             cur.close()
+
         except sqlite3.Error as error:
             error_with_smt(event, error)
 # **************************************************************************************************************
@@ -762,18 +828,19 @@ def main():
             global vk
             vk = vk_session.get_api()
 
-            if event.obj.message['text'].lower().startswith('привет'):
-                mes = "Приветствую, я воспринимаю лишь следующие команды (Если я тебя не пойму, " \
-                      "то соответственно не отвечу!):\n\n " \
-                      "Если Вы зарегистрированы в системе 'Ваш финансовый помощник':\n\n" \
-                      "1) '-<число> (пример: -999.99)'\n" \
-                      "2) 'остаток'\n" \
-                      "3) 'сколько за <дата>'\n" \
-                      "4) 'сбережения'\n\n" \
-                      "Если Вы не зарегистрированы:\n\n" \
-                      "1) 'как зарегистрироваться?'\n" \
-                      "2) 'зачем ты мне?\n" \
-                      "3) 'что ты умеешь?'"
+            if event.obj.message['text'].lower().startswith('привет') or \
+                    event.obj.message['text'].lower().startswith('что ты умеешь'):
+                mes = 'Приветствую, я воспринимаю лишь следующие команды:\n\n' \
+                      'Введите "?" чтобы зарегистрироваться\n' \
+                      'Введите "зачем ты мне?" чтобы я рассказал зачем Вам нужен финансовый помощник\n' \
+                      'Введите "что ты умеешь?" чтобы узнать мои команды\n' \
+                      'Введите "-<число>" (пример: -999.99) чтобы добавить трату\n'\
+                      'Введите "остаток" чтобы узнать сколько Вы можете потратить\n'\
+                      'Введите "сколько за <дата>" чтобы узнать сколько Вы потратили за определённый день\n' \
+                      'Введите "сбережения" чтобы узнать сколько у Вас в накоплениях\n' \
+                      'Введите "обо мне" чтобы узнать информацию о Вас\n' \
+                      'Введите "день зп" чтобы обновить бюджет (Ваш остаток будет автоматически переведён ' \
+                      'в накопления)\n'
                 answer(event, mes)
 
             elif event.obj.message['text'].lower().startswith('как зарегистрироваться'):
@@ -785,17 +852,6 @@ def main():
             elif event.obj.message['text'].lower().startswith('зачем ты мне'):
                 answer(event, "Я помогу Вам усилить контроль над собственными финансами"
                               "и тем самым помочь правильно их распределять")
-
-            elif event.obj.message['text'].lower().startswith('что ты умеешь'):
-                answer(event, 'Мои возможности:\nЧтобы добавить трату отправьте мне: '
-                              '"-<число> (пример: -999.99)"\n\n'
-                              'Чтобы узнать сколько Вы можете потратить отправьте мне:\n'
-                              '"остаток"\n'
-                              'Чтобы узнать сколько Вы потратили за определённый день отправьте мне:\n'
-                              '"за <дата> (пример: за 22 11 1970)"\n'
-                              'Чтобы узнать сколько у Вас накоплений отправьте мне: '
-                              '"сбережения"'
-                              'Чтобы узнать информацию о себе отправь мне "обо мне "')
 
             elif event.obj.message['text'].lower().startswith('-'):
                 expenses(event)
