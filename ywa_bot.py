@@ -4,14 +4,6 @@ import sqlite3
 import random
 import datetime
 
-# from modules_for_bot.hmmc import how_much_may_cost
-# from modules_for_bot.hmis import how_much_is_spent
-# from modules_for_bot.reg import registration
-# from modules_for_bot.exp import expenses
-# from modules_for_bot.bank import my_bank
-# from modules_for_bot.data_of_user import about_me
-# from modules_for_bot.utils import answer
-
 
 # *****************************************UTILS***************************************************************
 # *****************************************UTILS***************************************************************
@@ -630,7 +622,7 @@ def expenses(event):
                 exp_data_a.append(exp_change_id())
 
                 cur.execute(
-                    "INSERT INTO archive_users (userid, category_name, importance, costs, date, time, "
+                    "INSERT INTO archive_expenses (userid, category_name, importance, costs, date, time, "
                     "exp_id, changing_time) "
                     "VALUES(?, ?, ?, ?, ?, ?, ?, ?)", exp_data_a)  # добавляем данные в архив-таблицу трат
 
