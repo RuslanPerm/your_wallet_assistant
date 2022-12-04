@@ -554,21 +554,6 @@ def how_much_may_cost(event):
 # *****************************************EXPENSES*****************************************************
 # *****************************************EXPENSES*****************************************************
 # *****************************************EXPENSES*****************************************************
-def exp_change_id():
-    conn = sqlite3.connect('database.db')  # подключение к бд
-    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
-
-    cur.execute(f"SELECT changing_id FROM archive_expenses")
-    try:
-        id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
-    except IndexError:
-        id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
-
-    conn.commit()
-    cur.close()
-    return id_number
-
-
 def exp_id():
     conn = sqlite3.connect('database.db')  # подключение к бд
     cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
@@ -618,14 +603,6 @@ def expenses(event):
                 cur.execute("INSERT INTO expenses (userid, category_name, importance, costs, date, time, exp_id) "
                             "VALUES(?, ?, ?, ?, ?, ?, ?)", exp_data)  # добавляем данные в таблицу трат
 
-                exp_data_a = exp_data.copy()
-                exp_data_a.append(exp_change_id())
-
-                cur.execute(
-                    "INSERT INTO archive_expenses (userid, category_name, importance, costs, date, time, "
-                    "exp_id, changing_time) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?)", exp_data_a)  # добавляем данные в архив-таблицу трат
-
                 conn.commit()
                 cur.close()
                 answer(event, "Данные о трате успешно записаны!")
@@ -646,21 +623,6 @@ def expenses(event):
 # **************************************REGISTRATION************************************************
 # **************************************REGISTRATION************************************************
 # **************************************REGISTRATION************************************************
-def users_change_id():
-    conn = sqlite3.connect('database.db')  # подключение к бд
-    cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
-
-    cur.execute(f"SELECT changing_id FROM archive_users")
-    try:
-        id_number = cur.fetchall()[-1][0] + 1  # берём последний элемент(картеж) списка и первый элемент картежа
-    except IndexError:
-        id_number = 1  # если таблица пустая, то индексу устанавливается значение 1
-
-    conn.commit()
-    cur.close()
-    return id_number
-
-
 def pass_word(event):
     password = take_mes()
     if password:
@@ -779,10 +741,6 @@ def registration(event):
         # данные для таблицы
         full_data = [user_id, name, budget, necessary, other, capital, password, acc, reg_date, reg_time]
 
-        # данные для архивной таблицы
-        change_id = users_change_id()  # генерирует id
-        full_data_a = [change_id, user_id, name, budget, necessary, other, capital, password, acc, reg_date, reg_time]
-
         try:
             conn = sqlite3.connect('database.db')  # подключение к бд
             cur = conn.cursor()  # создаём объект соединения с бд, к-й позволяет делать запросы бд
@@ -790,11 +748,6 @@ def registration(event):
             # добавляем данные в таблицу пользователей
             cur.execute("INSERT INTO users (userid, name, budget, f_plan_n, f_plan_o, f_plan_c, password, "
                         "accumulation, pay_day, pay_time) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", full_data)
-
-            # добавляем данные в архив-таблицу пользователей
-            cur.execute("INSERT INTO archive_users (changing_id, userid, name, budget, f_plan_n, f_plan_o, f_plan_c,"
-                        " password, accumulation, pay_day, pay_time) "
-                        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", full_data_a)
 
             answer(event, f'Приятно познакомиться, {name}, Вы успешно зарегистрированы!')
             conn.commit()
